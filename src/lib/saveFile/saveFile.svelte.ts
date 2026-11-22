@@ -20,6 +20,8 @@ type LoadedSave = {
   loadedBytes: Uint8Array | null;
   parseError: string | null;
   loadId: number;
+  s2armId?: string;
+  s2armSource?: Uint8Array;
 };
 
 export type SchemaForKind = {
@@ -85,7 +87,14 @@ export function getSaveBytes(kind: SaveKind): Uint8Array | null {
   if (!save) return null;
   const decoded = save.decoded;
   if (decoded) {
-    return writeSav(encode(SCHEMAS[kind], decoded));
+    const bytes = writeSav(encode(SCHEMAS[kind], decoded));
+    // The S2Arm Mii saves have zero padding after the serialized data.
+    if (kind === 'mii' && bytes.length < save.size) {
+      const padded = new Uint8Array(save.size);
+      padded.set(bytes);
+      return padded;
+    }
+    return bytes;
   }
   return save.loadedBytes;
 }
@@ -119,7 +128,13 @@ type SetSaveOptions = { persist?: boolean };
 
 export function setSaveFromBytes(
   kind: SaveKind,
-  input: { name: string; bytes: Uint8Array; lastModified?: number },
+  input: {
+    name: string;
+    bytes: Uint8Array;
+    lastModified?: number;
+    s2armId?: string;
+    s2armSource?: Uint8Array;
+  },
   options: SetSaveOptions = {},
 ): void {
   const lastModified = input.lastModified ?? Date.now();
@@ -132,6 +147,8 @@ export function setSaveFromBytes(
     loadedBytes: input.bytes,
     parseError,
     loadId: nextLoadId++,
+    s2armId: input.s2armId,
+    s2armSource: input.s2armSource,
   };
   setSlotSummary(kind, { name: input.name });
   if (options.persist !== false && decoded) persistCurrent(kind);
@@ -139,7 +156,14 @@ export function setSaveFromBytes(
 
 export function restoreSaveFromDecoded(
   kind: SaveKind,
-  input: { name: string; size: number; lastModified: number; decoded: DecodedSave },
+  input: {
+    name: string;
+    size: number;
+    lastModified: number;
+    decoded: DecodedSave;
+    s2armId?: string;
+    s2armSource?: Uint8Array;
+  },
 ): void {
   const { decoded } = input;
   if (
@@ -176,6 +200,8 @@ export function restoreSaveFromDecoded(
     loadedBytes: null,
     parseError: null,
     loadId: nextLoadId++,
+    s2armId: input.s2armId,
+    s2armSource: input.s2armSource,
   };
   setSlotSummary(kind, { name: input.name });
 }
@@ -192,6 +218,8 @@ export function persistCurrent(kind: SaveKind): void {
     lastModified: save.lastModified,
     savedAt: Date.now(),
     decoded: $state.snapshot(decoded) as DecodedSave,
+    s2armId: save.s2armId,
+    s2armSource: save.s2armSource,
   });
 }
 

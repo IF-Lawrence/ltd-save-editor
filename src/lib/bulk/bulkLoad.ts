@@ -1,4 +1,5 @@
-import { unzipSync, type Unzipped } from 'fflate';
+import { unzipSync } from 'fflate';
+import { loadS2ArmArchive, S2ARM_EXT, type S2ArmSource } from '$lib/bulk/s2armArchive';
 import {
   detectSaveKindFromBytes,
   detectSaveKindFromName,
@@ -7,7 +8,10 @@ import {
 } from '$lib/saveFile/saveFile.svelte';
 import { SAVE_KINDS, type SaveKind } from '$lib/saveFile/types';
 import { isJunkArchiveEntry, isSidecarFileName } from '$lib/shareMii/sidecar/sidecar';
-import { collectSidecarFromNamedBytes } from '$lib/shareMii/sidecar/sidecarStore.svelte';
+import {
+  clearSidecar,
+  collectSidecarFromNamedBytes,
+} from '$lib/shareMii/sidecar/sidecarStore.svelte';
 import type { DragSnapshot } from '$lib/ui/dragSnapshot';
 
 type Candidate = {
@@ -23,21 +27,33 @@ export type BulkPlan = {
   skipped: { name: string; reason: 'unrecognized' | 'read_failed' }[];
   totalSeen: number;
   ugcFiles: { name: string; bytes: Uint8Array }[];
+  s2armSource?: S2ArmSource;
 };
 
 const ZIP_EXT = /\.zip$/i;
 const SAV_EXT = /\.sav$/i;
 
-type ZipExpansion = { savs: Candidate[]; sidecars: { name: string; bytes: Uint8Array }[] };
+type ZipExpansion = {
+  savs: Candidate[];
+  sidecars: { name: string; bytes: Uint8Array }[];
+  s2armSource?: S2ArmSource;
+};
 
 async function expandZip(file: File): Promise<ZipExpansion> {
-  const buf = new Uint8Array(await file.arrayBuffer());
-  let entries: Unzipped;
+  const s2arm = S2ARM_EXT.test(file.name);
+  let entries: Record<string, Uint8Array>;
+  let s2armSource: S2ArmSource | undefined;
   try {
-    entries = unzipSync(buf, {
-      filter: (e) =>
-        !isJunkArchiveEntry(e.name) && (SAV_EXT.test(e.name) || isSidecarFileName(e.name)),
-    });
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (s2arm) {
+      entries = await loadS2ArmArchive(bytes);
+      s2armSource = { id: crypto.randomUUID(), bytes };
+    } else {
+      entries = unzipSync(bytes, {
+        filter: (e) =>
+          !isJunkArchiveEntry(e.name) && (SAV_EXT.test(e.name) || isSidecarFileName(e.name)),
+      });
+    }
   } catch {
     return { savs: [], sidecars: [] };
   }
@@ -53,7 +69,7 @@ async function expandZip(file: File): Promise<ZipExpansion> {
       sidecars.push({ name: path, bytes });
     }
   }
-  return { savs, sidecars };
+  return { savs, sidecars, s2armSource };
 }
 
 async function fileToCandidate(file: File): Promise<Candidate> {
@@ -71,15 +87,21 @@ export async function planBulkLoad(files: File[]): Promise<BulkPlan> {
   const candidates: Candidate[] = [];
   const sidecarBatches: { name: string; bytes: Uint8Array }[][] = [];
   const folderSidecars: { name: string; bytes: Uint8Array }[] = [];
+  let s2armSource: S2ArmSource | undefined;
 
   for (const file of files) {
-    if (ZIP_EXT.test(file.name)) {
+    if (S2ARM_EXT.test(file.name) && files.length > 1) {
+      skipped.push({ name: file.name, reason: 'read_failed' });
+      continue;
+    }
+    if (ZIP_EXT.test(file.name) || S2ARM_EXT.test(file.name)) {
       const expanded = await expandZip(file);
       if (expanded.savs.length === 0 && expanded.sidecars.length === 0) {
         skipped.push({ name: file.name, reason: 'read_failed' });
         continue;
       }
       candidates.push(...expanded.savs);
+      s2armSource = expanded.s2armSource;
       if (expanded.sidecars.length > 0) sidecarBatches.push(expanded.sidecars);
       continue;
     }
@@ -114,7 +136,7 @@ export async function planBulkLoad(files: File[]): Promise<BulkPlan> {
     }
   }
   const ugcFiles = Array.from(ugcMap, ([name, bytes]) => ({ name, bytes }));
-  if (ugcFiles.length > 0) collectSidecarFromNamedBytes('bulk', ugcFiles);
+  if (!s2armSource && ugcFiles.length > 0) collectSidecarFromNamedBytes('bulk', ugcFiles);
 
   const matches = new Map<SaveKind, Candidate>();
   for (const c of candidates) {
@@ -128,7 +150,7 @@ export async function planBulkLoad(files: File[]): Promise<BulkPlan> {
 
   const conflicts = SAVE_KINDS.filter((k) => matches.has(k) && getSave(k) != null);
 
-  return { matches, conflicts, skipped, totalSeen: candidates.length, ugcFiles };
+  return { matches, conflicts, skipped, totalSeen: candidates.length, ugcFiles, s2armSource };
 }
 
 function baseName(name: string): string {
@@ -145,9 +167,19 @@ function isInUgcBackupFolder(path: string): boolean {
 }
 
 export function applyBulkPlan(plan: BulkPlan): SaveKind[] {
+  if (plan.s2armSource) {
+    clearSidecar();
+    collectSidecarFromNamedBytes('bulk', plan.ugcFiles);
+  }
   const loaded: SaveKind[] = [];
   for (const [kind, c] of plan.matches) {
-    setSaveFromBytes(kind, { name: c.name, bytes: c.bytes, lastModified: c.lastModified });
+    setSaveFromBytes(kind, {
+      name: c.name,
+      bytes: c.bytes,
+      lastModified: c.lastModified,
+      s2armId: plan.s2armSource?.id,
+      s2armSource: kind === 'player' ? plan.s2armSource?.bytes : undefined,
+    });
     loaded.push(kind);
   }
   return loaded;

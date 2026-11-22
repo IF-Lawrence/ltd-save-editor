@@ -15,6 +15,8 @@ export function confirmRestore(): void {
         size: session.size,
         lastModified: session.lastModified,
         decoded: session.decoded,
+        s2armId: session.s2armId,
+        s2armSource: session.s2armSource,
       });
       loaded.push(session.kind);
     } catch {

@@ -1,7 +1,12 @@
 <script lang="ts">
   import { _ } from 'virtual:i18n/_shared';
   import { track } from '$lib/analytics';
-  import { exportAllSaves, loadedKinds } from '$lib/bulk/bulkExport';
+  import {
+    canExportS2Arm,
+    exportAllSaves,
+    getS2ArmExportSource,
+    loadedKinds,
+  } from '$lib/bulk/bulkExport';
   import { bulkLoadFiles } from '$lib/bulk/bulkLoader.svelte';
   import { requestClearAll } from '$lib/bulk/clearAll.svelte';
   import { errorMessage } from '$lib/errorMessage';
@@ -28,8 +33,12 @@
   }: Props = $props();
 
   let fileInput: HTMLInputElement;
+  let templateInput: HTMLInputElement;
+  let exporting = $state(false);
 
   const exportableCount = $derived(loadedKinds().length);
+  const exportS2Arm = $derived(canExportS2Arm());
+  const needsTemplate = $derived(exportS2Arm && !getS2ArmExportSource());
   const hasPrimary = $derived((onReplace && replaceLabel) || (onAction && actionLabel));
 
   function onPick(event: Event): void {
@@ -40,12 +49,27 @@
     void bulkLoadFiles(files);
   }
 
-  function exportAll(): void {
+  function onExport(): void {
+    if (needsTemplate) templateInput.click();
+    else void exportAll();
+  }
+
+  function onTemplatePick(event: Event): void {
+    const target = event.currentTarget as HTMLInputElement;
+    const file = target.files?.[0];
+    target.value = '';
+    if (file) void exportAll(file);
+  }
+
+  async function exportAll(template?: File): Promise<void> {
+    exporting = true;
     try {
-      exportAllSaves();
+      await exportAllSaves(template);
     } catch (e) {
       track('export_failed', { kind: 'bulk' });
       showToast('error', errorMessage(e));
+    } finally {
+      exporting = false;
     }
   }
 </script>
@@ -116,10 +140,14 @@
       <button
         type="button"
         class={PILL_BUTTON_CLASS}
-        onclick={exportAll}
-        disabled={exportableCount === 0}
+        onclick={onExport}
+        disabled={exporting || exportableCount === 0}
       >
-        {$_('bulk.export_all', { values: { count: exportableCount } })}
+        {needsTemplate
+          ? $_('bulk.export_s2arm_with_template')
+          : exportS2Arm
+            ? $_('bulk.export_s2arm')
+            : $_('bulk.export_all', { values: { count: exportableCount } })}
       </button>
       <button
         type="button"
@@ -148,12 +176,23 @@
     {/if}
   </div>
 
+  {#if needsTemplate}
+    <p class="text-xs text-content-muted">{$_('bulk.export_s2arm_template_hint')}</p>
+  {/if}
+
   <input
     bind:this={fileInput}
     type="file"
     class="hidden"
     multiple
-    accept=".sav,.zip"
+    accept=".sav,.zip,.s2asave"
     onchange={onPick}
+  />
+  <input
+    bind:this={templateInput}
+    type="file"
+    class="hidden"
+    accept=".s2asave"
+    onchange={onTemplatePick}
   />
 </div>

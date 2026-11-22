@@ -13,6 +13,8 @@ export type StoredSession = {
   lastModified: number;
   savedAt: number;
   decoded: DecodedSave;
+  s2armId?: string;
+  s2armSource?: Uint8Array;
 };
 
 export type StoredSidecar = {

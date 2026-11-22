@@ -45,7 +45,7 @@
 </script>
 
 <div class="w-full">
-  <DropZone multiple accept=".sav,.zip" paddingClass="p-12" {onFiles} {onDataTransfer}>
+  <DropZone multiple accept=".sav,.zip,.s2asave" paddingClass="p-12" {onFiles} {onDataTransfer}>
     {#snippet children({ openPicker })}
       <UploadArrowIcon />
       <p class="text-base font-bold text-content-strong">

@@ -23,6 +23,22 @@ A browser-based save editor for _Tomodachi Life: Living the Dream_ (Nintendo Swi
 - **ShareMii** - import and export Miis and UGC items between save files, compatible with the [ShareMii](https://github.com/Star-F0rce/ShareMii) file format created by Star-F0rce.
 - **Advanced** - raw hash-keyed entry browser for fields the structured tabs don't cover yet.
 
+## Run locally with S2Arm saves
+
+Build with Node.js 24 and serve the build with Python 3:
+
+```sh
+npm ci
+npm run build
+python3 local_server.py
+```
+
+On macOS, `start-local.command` starts the built editor at `http://127.0.0.1:4178/`.
+
+- Open a Tomodachi Life `.s2asave` backup to load the three game saves and their UGC files. The editable files in both S2Arm save slots must match.
+- Choose **Export S2Arm save (.s2asave)** to download a new archive. If the session started from ordinary `.sav` files or a ZIP, load all three saves and choose a recent `.s2asave` backup of the same island as the template when exporting.
+- Restore the exported archive through S2Arm's save manager to apply it to the game.
+
 ## Packages
 
 The save-format core lives in standalone, published packages under [`packages/`](./packages). The editor consumes them as workspace dependencies, and they are reusable on their own:
