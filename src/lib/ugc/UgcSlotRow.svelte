@@ -43,6 +43,7 @@
   type Props = {
     slot: number;
     name: string;
+    subtypeLabel?: string;
     kind: UgcKind;
     sidecar: SidecarSource;
     selected: boolean;
@@ -50,7 +51,7 @@
     onSelect: (slot: number) => void;
   };
 
-  let { slot, name, kind, sidecar, selected, edited, onSelect }: Props = $props();
+  let { slot, name, subtypeLabel, kind, sidecar, selected, edited, onSelect }: Props = $props();
 
   let el = $state<HTMLLIElement | null>(null);
   let visible = $state(false);
@@ -98,6 +99,7 @@
   <button
     type="button"
     onclick={() => onSelect(slot)}
+    aria-pressed={selected}
     class={[
       'flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors',
       selected ? 'bg-orange-500/15 text-content-strong' : 'hover:bg-surface-muted text-content',
@@ -115,10 +117,11 @@
       {/if}
     </div>
     <div class="min-w-0 flex-1">
-      <span class="block font-mono text-[11px] text-content-muted"
-        >#{String(slot - 1).padStart(3, '0')}</span
-      >
       <span class="block truncate">{name}</span>
+      <span class="flex items-baseline gap-2 text-xs text-content-muted">
+        <span class="font-mono">#{String(slot - 1).padStart(3, '0')}</span>
+        {#if subtypeLabel}<span class="truncate">{subtypeLabel}</span>{/if}
+      </span>
     </div>
   </button>
 </li>

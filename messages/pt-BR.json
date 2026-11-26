@@ -1557,6 +1557,14 @@
       "title": "Solte sua pasta Ugc/ ou um zip aqui"
     },
     "editor": {
+      "item_subtype": "Subtipo do item",
+      "new_item_subtype": "Subtipo do novo item",
+      "pick_subtype": "Escolher subtipo",
+      "create_item": "Criar",
+      "cancel_add": "Cancelar",
+      "copy_as_new": "Copiar como novo item",
+      "copy_needs_template": "Escolha um item com subtipo conhecido e os três arquivos de textura.",
+      "copy_restricted": "Este item tem restrição de compartilhamento.",
       "applying": "Codificando…",
       "bc1_mode": {
         "auto": "Auto",
@@ -1626,6 +1634,8 @@
     },
     "kind_tabs_label": "Tipo de item UGC",
     "list": {
+      "subtype_filter": "Subtipo",
+      "all_subtypes": "Todos os subtipos",
       "add_blank": "Adicionar item em branco",
       "empty": "Nenhum item nesta categoria.",
       "facepaint_owned": "Usada por {name}",
@@ -1649,6 +1659,8 @@
     "sidecar_only_notice": "Edição sem {playerSav}: alguns recursos podem não estar disponíveis.",
     "title": "Editor UGC",
     "toast": {
+      "subtype_changed": "Subtipo do item atualizado.",
+      "copied": "Copiado para o espaço {slot}.",
       "add_full": "Esta categoria está cheia.",
       "added": "Item em branco adicionado no slot {slot}.",
       "downloaded_pending": "{count, plural, one {# arquivo editado baixado} other {# arquivos editados baixados}} como zip.",

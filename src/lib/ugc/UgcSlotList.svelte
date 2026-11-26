@@ -5,7 +5,7 @@
   import UgcSlotRow from './UgcSlotRow.svelte';
 
   type Props = {
-    rows: UgcRow[];
+    rows: (UgcRow & { subtypeLabel?: string })[];
     kind: UgcKind;
     sidecar: SidecarSource;
     selectedSlot: number | null;
@@ -28,6 +28,7 @@
       <UgcSlotRow
         slot={r.slot}
         name={r.name}
+        subtypeLabel={r.subtypeLabel}
         {kind}
         {sidecar}
         selected={selectedSlot === r.slot}

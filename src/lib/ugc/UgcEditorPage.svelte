@@ -19,7 +19,7 @@
     revertSidecarFiles,
     sidecarOrigin,
   } from '$lib/shareMii/sidecar/sidecarStore.svelte';
-  import { CARD_CLASS, PILL_BUTTON_CLASS } from '$lib/ui/styles';
+  import { CARD_CLASS, INPUT_CLASS, PILL_BUTTON_CLASS } from '$lib/ui/styles';
   import { track } from '$lib/analytics';
   import { showToast } from '$lib/toast/toast.svelte';
   import FacepaintSection from '$lib/ugc/facepaint/FacepaintSection.svelte';
@@ -29,20 +29,26 @@
     buildKindCounts,
     buildReplaceWrites,
     buildUgcRows,
+    canCopyUgcItem,
     clearLanRestriction,
     decodeSidecarToPngUrl,
     decodeSlotCanvasToPng,
     decodeSlotToPng,
+    duplicateUgcItem,
     exportSlotZsFiles,
+    findUgcCopySlot,
     getSlotOriginalUgctex,
     getUgcSlotName,
+    getUgcSubtypeOptions,
     hasLanRestriction,
+    hasUgcNameLanguageMismatch,
     isSlotEdited,
-    nextBlankUgcSlot,
     setUgcSlotName,
+    setUgcSlotSubtype,
     slotFileNames,
     slotPreviewCandidates,
     slotThumbName,
+    type UgcSubtype,
   } from './ugcEditorPage';
   import UgcDropZone from './UgcDropZone.svelte';
   import UgcSidecarBar from './UgcSidecarBar.svelte';
@@ -52,6 +58,9 @@
   type TabKind = UgcKind | 'FacePaint';
   let activeKind = $state<TabKind>('FacePaint');
   let selectedSlot = $state<number | null>(null);
+  let subtypeFilter = $state<UgcSubtype | ''>('');
+  let addingBlank = $state(false);
+  let newSubtype = $state<Exclude<UgcSubtype, 'unknown'> | ''>('');
   let busy = $state(false);
   let pngInput = $state<HTMLInputElement | null>(null);
 
@@ -119,17 +128,35 @@
   ]);
 
   const rows = $derived.by(() => {
-    void playerState.dirty;
+    void playerState.rev;
     if (!ugcKind) return [];
     return buildUgcRows(playerAccessor(), ugcKind, sidecar, {
       unnamed: (slot) => $_('ugc_editor.list.unnamed', { values: { slot } }),
     });
   });
+  const subtypes = $derived([
+    ...new Set(rows.flatMap((row) => (row.subtype ? [row.subtype] : []))),
+  ]);
+  const visibleRows = $derived(
+    rows
+      .filter((row) => !subtypeFilter || row.subtype === subtypeFilter)
+      .map((row) => ({
+        ...row,
+        subtypeLabel: row.subtype ? $_(`ugc_editor.subtype.${row.subtype}`) : undefined,
+      })),
+  );
+  const subtypeOptions = $derived(ugcKind ? getUgcSubtypeOptions(playerAccessor(), ugcKind) : []);
+  const selectedSubtype = $derived(rows.find((row) => row.slot === selectedSlot)?.subtype);
 
   const currentName = $derived.by(() => {
     if (selectedSlot === null || !ugcKind) return '';
     return getUgcSlotName(playerAccessor(), ugcKind, selectedSlot);
   });
+  const nameLanguageMismatch = $derived(
+    selectedSlot !== null &&
+      ugcKind !== null &&
+      hasUgcNameLanguageMismatch(playerAccessor(), ugcKind, selectedSlot),
+  );
 
   const selectedHasThumb = $derived.by(() => {
     if (selectedSlot === null || !ugcKind) return false;
@@ -142,14 +169,22 @@
     return isSlotEdited(ugcKind, selectedSlot);
   });
 
-  const addSlot = $derived.by(() => {
-    void playerState.dirty;
-    void sidecar.files.size;
-    if (!ugcKind) return -1;
-    return nextBlankUgcSlot(playerAccessor(), ugcKind, sidecar);
+  const copySlot = $derived.by(() => {
+    void playerState.rev;
+    const acc = playerAccessor();
+    return ugcKind && acc && sidecarLoaded ? findUgcCopySlot(acc, ugcKind, sidecar) : -1;
   });
-
-  const canAddBlank = $derived(!playerless && sidecarLoaded && addSlot > 0);
+  const canAddBlank = $derived(copySlot > 0 && subtypeOptions.length > 0);
+  const copyUnavailable = $derived.by(() => {
+    void playerState.rev;
+    const acc = playerAccessor();
+    if (!acc || !ugcKind || selectedSlot === null) return '';
+    if (selectedHasLanRestriction) return $_('ugc_editor.editor.copy_restricted');
+    if (!canCopyUgcItem(acc, ugcKind, selectedSlot, sidecar)) {
+      return $_('ugc_editor.editor.copy_needs_template');
+    }
+    return copySlot < 0 ? $_('ugc_editor.toast.add_full') : '';
+  });
 
   const selectedHasLanRestriction = $derived.by(() => {
     void playerState.dirty;
@@ -176,6 +211,9 @@
     void playerSave?.loadId;
     untrack(() => {
       selectedSlot = null;
+      subtypeFilter = '';
+      addingBlank = false;
+      newSubtype = '';
       tx.reset();
       revokeCurrentPreview();
     });
@@ -232,7 +270,7 @@
       showToast('warn', $_('ugc_editor.editor.rename.empty'));
       return;
     }
-    if (trimmed === currentName) return;
+    if (trimmed === currentName && !nameLanguageMismatch) return;
     const acc = playerAccessor();
     if (!acc) return;
     try {
@@ -248,26 +286,71 @@
   }
 
   async function addBlank(): Promise<void> {
-    if (busy || !ugcKind || !canAddBlank) return;
+    if (busy || !ugcKind || !canAddBlank || !newSubtype) return;
     const acc = playerAccessor();
     if (!acc) return;
+    const kind = ugcKind;
     busy = true;
     try {
-      const result = await buildBlankUgcAdd(acc, ugcKind, sidecar, (slot) =>
-        $_('ugc_editor.list.unnamed', { values: { slot } }),
+      const result = await buildBlankUgcAdd(
+        acc,
+        kind,
+        sidecar,
+        (slot) => $_('ugc_editor.list.unnamed', { values: { slot } }),
+        newSubtype,
       );
       if (!result) {
         showToast('warn', $_('ugc_editor.toast.add_full'));
         return;
       }
       replaceSidecarFiles(result.writes);
-      track('ugc_editor_add_blank', { kind: ugcKind, slot: result.slot });
+      if (ugcKind === kind) {
+        subtypeFilter = '';
+        addingBlank = false;
+        newSubtype = '';
+        selectRow(result.slot);
+      }
+      track('ugc_editor_add_blank', { kind, slot: result.slot });
       showToast('success', $_('ugc_editor.toast.added', { values: { slot: result.slot } }));
-      selectedSlot = result.slot;
     } catch (e) {
       showToast('error', errorMessage(e));
     } finally {
       busy = false;
+    }
+  }
+
+  function changeSubtype(subtype: string): void {
+    const acc = playerAccessor();
+    if (busy || !acc || !ugcKind || selectedSlot === null) return;
+    if (!setUgcSlotSubtype(acc, ugcKind, selectedSlot, subtype)) return;
+    if (subtypeFilter && subtypeFilter !== subtype) subtypeFilter = '';
+    showToast('success', $_('ugc_editor.toast.subtype_changed'));
+  }
+
+  function copySelected(): void {
+    if (busy || !ugcKind || selectedSlot === null || copyUnavailable) return;
+    const acc = playerAccessor();
+    if (!acc) return;
+    try {
+      const result = duplicateUgcItem(acc, ugcKind, selectedSlot, sidecar);
+      if (!result) {
+        showToast('warn', $_('ugc_editor.editor.copy_needs_template'));
+        return;
+      }
+      replaceSidecarFiles(result.writes);
+      selectRow(result.slot);
+      showToast('success', $_('ugc_editor.toast.copied', { values: { slot: result.slot } }));
+    } catch (e) {
+      showToast('error', errorMessage(e));
+    }
+  }
+
+  function filterBySubtype(value: UgcSubtype | ''): void {
+    subtypeFilter = value;
+    if (value && rows.find((row) => row.slot === selectedSlot)?.subtype !== value) {
+      selectedSlot = null;
+      tx.reset();
+      revokeCurrentPreview();
     }
   }
 
@@ -480,12 +563,79 @@
       {:else}
         <div class="grid gap-4 md:grid-cols-[280px_1fr]">
           <div>
-            <UgcSlotList {rows} kind={ugcKind} {sidecar} {selectedSlot} onSelect={selectRow} />
-            {#if !playerless && sidecarLoaded}
+            {#if subtypes.length > 0}
+              <div class="mb-3 flex items-center gap-2 text-sm text-content">
+                <label for="ugc-subtype-filter" class="shrink-0"
+                  >{$_('ugc_editor.list.subtype_filter')}</label
+                >
+                <select
+                  id="ugc-subtype-filter"
+                  class="{INPUT_CLASS} min-w-0 flex-1"
+                  value={subtypeFilter}
+                  onchange={(event) =>
+                    filterBySubtype(event.currentTarget.value as UgcSubtype | '')}
+                >
+                  <option value="">{$_('ugc_editor.list.all_subtypes')}</option>
+                  {#each subtypes as subtype (subtype)}
+                    <option value={subtype}>{$_(`ugc_editor.subtype.${subtype}`)}</option>
+                  {/each}
+                </select>
+              </div>
+            {/if}
+            <UgcSlotList
+              rows={visibleRows}
+              kind={ugcKind}
+              {sidecar}
+              {selectedSlot}
+              onSelect={selectRow}
+            />
+            {#if addingBlank}
+              <form
+                class="mt-3 space-y-2 rounded-lg border border-edge/60 p-3"
+                onsubmit={(event) => {
+                  event.preventDefault();
+                  void addBlank();
+                }}
+              >
+                <label for="ugc-new-item-subtype" class="block text-sm text-content">
+                  {$_('ugc_editor.editor.new_item_subtype')}
+                </label>
+                <select
+                  id="ugc-new-item-subtype"
+                  class="{INPUT_CLASS} w-full"
+                  bind:value={newSubtype}
+                  disabled={busy}
+                  required
+                >
+                  <option value="" disabled>{$_('ugc_editor.editor.pick_subtype')}</option>
+                  {#each subtypeOptions as subtype (subtype)}
+                    <option value={subtype}>{$_(`ugc_editor.subtype.${subtype}`)}</option>
+                  {/each}
+                </select>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    type="submit"
+                    class="{PILL_BUTTON_CLASS} disabled:opacity-50"
+                    disabled={busy || !canAddBlank || !newSubtype}
+                    >{$_('ugc_editor.editor.create_item')}</button
+                  >
+                  <button
+                    type="button"
+                    class={PILL_BUTTON_CLASS}
+                    disabled={busy}
+                    onclick={() => (addingBlank = false)}
+                    >{$_('ugc_editor.editor.cancel_add')}</button
+                  >
+                </div>
+              </form>
+            {:else if !playerless && sidecarLoaded}
               <button
                 type="button"
                 class="{PILL_BUTTON_CLASS} mt-3 w-full disabled:cursor-not-allowed disabled:opacity-50"
-                onclick={addBlank}
+                onclick={() => {
+                  newSubtype = subtypeOptions.find((option) => option === subtypeFilter) ?? '';
+                  addingBlank = true;
+                }}
                 disabled={busy || !canAddBlank}
               >
                 {$_('ugc_editor.list.add_blank')}
@@ -501,6 +651,7 @@
                 {busy}
                 bind:editedName
                 {currentName}
+                {nameLanguageMismatch}
                 {currentPreview}
                 {tx}
                 {selectedHasThumb}
@@ -509,6 +660,11 @@
                 bind:regenerateThumb
                 sidecarMissing={sidecarOrigin() === 'none'}
                 {playerless}
+                {copyUnavailable}
+                {selectedSubtype}
+                {subtypeOptions}
+                onChangeSubtype={changeSubtype}
+                onCopy={copySelected}
                 onApplyRename={applyRename}
                 onPickPng={() => pngInput?.click()}
                 onLoadFile={(file) => void tx.loadFile(file)}

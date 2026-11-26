@@ -1557,6 +1557,14 @@
       "title": "Dépose ton dossier Ugc/ ou un zip ici"
     },
     "editor": {
+      "item_subtype": "Sous-type de l’objet",
+      "new_item_subtype": "Sous-type du nouvel objet",
+      "pick_subtype": "Choisir un sous-type",
+      "create_item": "Créer",
+      "cancel_add": "Annuler",
+      "copy_as_new": "Copier comme nouvel objet",
+      "copy_needs_template": "Choisis un objet dont le sous-type est connu et qui contient les trois fichiers de texture.",
+      "copy_restricted": "Cet objet est soumis à une restriction de partage.",
       "applying": "Encodage…",
       "bc1_mode": {
         "auto": "Auto",
@@ -1626,6 +1634,8 @@
     },
     "kind_tabs_label": "Type d'élément UGC",
     "list": {
+      "subtype_filter": "Sous-type",
+      "all_subtypes": "Tous les sous-types",
       "add_blank": "Ajouter un élément vierge",
       "empty": "Aucun élément dans cette catégorie.",
       "facepaint_owned": "Porté par {name}",
@@ -1649,6 +1659,8 @@
     "sidecar_only_notice": "Édition sans {playerSav} : certaines fonctionnalités peuvent ne pas être disponibles.",
     "title": "Éditeur UGC",
     "toast": {
+      "subtype_changed": "Sous-type de l’objet modifié.",
+      "copied": "Copié dans l’emplacement {slot}.",
       "add_full": "Cette catégorie est pleine.",
       "added": "Élément vierge ajouté à l'emplacement {slot}.",
       "downloaded_pending": "{count, plural, one {# fichier modifié téléchargé} other {# fichiers modifiés téléchargés}} en zip.",

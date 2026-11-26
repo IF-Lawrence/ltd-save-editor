@@ -542,6 +542,9 @@ export function addBlankUgc(
 
   initAddedSlotMeta(player, leaves, slotIdx, kind, ugcKindIndex(kind));
   player.setElement(leaves.names[0], slotIdx, name);
+  const language = getUgcNamingLanguage(player);
+  const region = PLAYER_SCHEMA.UGC[kind].RegionLanguageID;
+  if (language !== null && player.has(region)) player.setElement(region, slotIdx, language);
 
   const writes: SidecarFile[] = [
     { name: ugcCanvasFileName(kind, slotIdx), bytes: textures.canvas },
@@ -552,6 +555,13 @@ export function addBlankUgc(
     for (const f of writes) sidecar.files.set(f.name, f.bytes);
   }
   return { textureWrites: writes };
+}
+
+export function getUgcNamingLanguage(player: Accessor<'player'>): number | null {
+  const lastLanguage = PLAYER_SCHEMA.Player.LastRegionLanguageID;
+  if (player.has(lastLanguage)) return player.get(lastLanguage);
+  const islandLanguage = PLAYER_SCHEMA.Player.IslandNameRegionLanguageID;
+  return player.has(islandLanguage) ? player.get(islandLanguage) : null;
 }
 
 function buffersEqual(a: Uint8Array, b: Uint8Array): boolean {

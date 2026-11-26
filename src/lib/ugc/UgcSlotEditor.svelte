@@ -1,14 +1,16 @@
 <script lang="ts">
   import { _ } from 'virtual:i18n/ugc_editor+content_kinds';
-  import { PILL_BUTTON_CLASS, PRIMARY_BUTTON_CLASS } from '$lib/ui/styles';
+  import { INPUT_CLASS, PILL_BUTTON_CLASS, PRIMARY_BUTTON_CLASS } from '$lib/ui/styles';
   import PreviewPair from '$lib/ugc/texture/PreviewPair.svelte';
   import TextureControls from '$lib/ugc/texture/TextureControls.svelte';
   import type { TextureReplaceState } from '$lib/ugc/texture/textureReplaceState.svelte';
+  import type { UgcSubtype } from './ugcEditorPage';
 
   type Props = {
     busy: boolean;
     editedName: string;
     currentName: string;
+    nameLanguageMismatch: boolean;
     currentPreview: string | null;
     tx: TextureReplaceState;
     selectedHasThumb: boolean;
@@ -17,6 +19,11 @@
     regenerateThumb: boolean;
     sidecarMissing: boolean;
     playerless: boolean;
+    copyUnavailable: string;
+    selectedSubtype: UgcSubtype | undefined;
+    subtypeOptions: UgcSubtype[];
+    onChangeSubtype: (value: string) => void;
+    onCopy: () => void;
     onApplyRename: () => void;
     onPickPng: () => void;
     onLoadFile: (file: File) => void;
@@ -32,6 +39,7 @@
     busy,
     editedName = $bindable(),
     currentName,
+    nameLanguageMismatch,
     currentPreview,
     tx,
     selectedHasThumb,
@@ -40,6 +48,11 @@
     regenerateThumb = $bindable(),
     sidecarMissing,
     playerless,
+    copyUnavailable,
+    selectedSubtype,
+    subtypeOptions,
+    onChangeSubtype,
+    onCopy,
     onApplyRename,
     onPickPng,
     onLoadFile,
@@ -73,10 +86,44 @@
         type="button"
         class={PILL_BUTTON_CLASS}
         onclick={onApplyRename}
-        disabled={busy || editedName.trim().length === 0 || editedName.trim() === currentName}
+        disabled={busy ||
+          editedName.trim().length === 0 ||
+          (editedName.trim() === currentName && !nameLanguageMismatch)}
       >
         {$_('ugc_editor.editor.rename.save')}
       </button>
+    </div>
+    <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+      {#if selectedSubtype && subtypeOptions.length > 0}
+        <div class="flex flex-wrap items-center gap-2 text-sm text-content">
+          <label for="ugc-item-subtype">{$_('ugc_editor.editor.item_subtype')}</label>
+          <select
+            id="ugc-item-subtype"
+            class={INPUT_CLASS}
+            value={selectedSubtype}
+            disabled={busy}
+            onchange={(event) => onChangeSubtype(event.currentTarget.value)}
+          >
+            {#if !subtypeOptions.includes(selectedSubtype)}
+              <option value={selectedSubtype} disabled
+                >{$_(`ugc_editor.subtype.${selectedSubtype}`)}</option
+              >
+            {/if}
+            {#each subtypeOptions as subtype (subtype)}
+              <option value={subtype}>{$_(`ugc_editor.subtype.${subtype}`)}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+      <button
+        type="button"
+        class="{PILL_BUTTON_CLASS} disabled:cursor-not-allowed disabled:opacity-50"
+        onclick={onCopy}
+        disabled={busy || !!copyUnavailable}
+      >
+        {$_('ugc_editor.editor.copy_as_new')}
+      </button>
+      {#if copyUnavailable}<span class="text-xs text-content-muted">{copyUnavailable}</span>{/if}
     </div>
   </div>
 {/if}
